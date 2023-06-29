@@ -13,7 +13,13 @@ mongoClient.connect()
     .then(() => db = mongoClient.db())
     .catch(err => console.log(err.messsage));
 
-const schema = Joi.object({
+const schemaMessage = Joi.object({
+    to: Joi.string().required(),
+    text: Joi.string().required(),
+    type: Joi.string().valid("message", "private_message")
+});
+
+const schemaParticipant = Joi.object({
     name: Joi.string().required()
 });
 
@@ -33,7 +39,7 @@ app.post('/participants', async (req,res) => {
     const {name} = req.body;
 
     try {
-        await schema.validateAsync(req.body);
+        await schemaParticipant.validateAsync(req.body);
     } catch (error) {
         return res.status(422).send({message: error.details[0].message})
     }
@@ -61,4 +67,50 @@ app.post('/participants', async (req,res) => {
     }
 
     res.sendStatus(201);
-})
+});
+
+app.post('/messages', async (req,res) => {
+    const from = req.headers.user;
+
+    try {
+        await schemaMessage.validateAsync(req.body);
+        const senderIsAtParticipants = await db.collection('participants').findOne({name: from});
+
+        if (!senderIsAtParticipants) return res.sendStatus(422);
+    } catch (error) {
+        return res.status(422).send(error.details[0].message);
+    }
+
+    try {
+        const newMessage = {from, ...req.body, time: dayjs().format('HH:mm:ss')}
+        db.collection('messages').insertOne(newMessage);
+    } catch (error) {
+        return res.status(500).send(error.message);
+    }
+
+    res.sendStatus(201);
+});
+
+app.get('/messages', async (req,res) => {
+    const {user} = req.headers;
+    const {limit} = req.query;
+
+    if (!user || limit && (!Number(limit) || Number(limit) < 1)) return res.sendStatus(422);
+
+    try {
+        let messages = await db.collection('messages').find({
+            $or: [
+                {from: user},
+                {to: user},
+                {to: "Todos"},
+                {type: "message"}
+                ]
+        }).toArray();
+
+        if (limit && Number(limit) < messages.length) messages = messages.slice(-Number(limit));
+        
+        res.send(messages.reverse());
+    } catch (error) {
+        return res.status(500).send(error.message);
+    }
+});
