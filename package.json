@@ -1,5 +1,6 @@
 {
   "name": "projeto13-batepapo-uol-api",
+  "type": "module",
   "version": "1.0.0",
   "description": "API de um batepapo online desenvolvida utilizando Node, Express, dotenv e MongoDB.",
   "main": "./src/app.js",
@@ -12,8 +13,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.8",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "joi": "^17.9.2",
     "mongodb": "^5.6.0"
   },
   "devDependencies": {
