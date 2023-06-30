@@ -118,8 +118,9 @@ app.post('/participants', async (req, res) => {
 });
 
 app.post('/messages', async (req, res) => {
-    let from = req.headers.user;
+    let from = Buffer.from(req.headers['user'], 'latin1').toString('utf-8');
     from = stripHtml(from.trim()).result;
+    console.log(from);
 
     try {
         if (!(await findUserByName(from))) return res.sendStatus(422);
@@ -203,7 +204,7 @@ app.post('/status', async (req, res) => {
 });
 
 app.delete('/messages/:id', async (req, res) => {
-    let user = req.headers.user;
+    let user = Buffer.from(req.headers['user'], 'latin1').toString('utf-8');
     user = stripHtml(user.trim()).result;
     const {id} = req.params;
     
