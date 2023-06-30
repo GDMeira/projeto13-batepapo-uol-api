@@ -93,13 +93,15 @@ app.post('/participants', async (req, res) => {
             type: 'status',
             time: dayjs().format('HH:mm:ss')
         }
-        db.collection(collections.messages).insertOne(newMessage);
+        const promisseMessage = db.collection(collections.messages).insertOne(newMessage);
 
         const newParticipant = {
             name,
             lastStatus: Date.now()
         }
-        db.collection(collections.participants).insertOne(newParticipant)
+        const promisseParticipant = db.collection(collections.participants).insertOne(newParticipant);
+
+        await Promise.all([promisseMessage, promisseParticipant])
     } catch (error) {
         res.status(500).send(error.message);
     }
