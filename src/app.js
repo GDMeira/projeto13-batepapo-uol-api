@@ -1,9 +1,10 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import cors from 'cors';
 import Joi from 'joi';
 import dayjs from 'dayjs';
+import { stripHtml } from "string-strip-html";
 
 dotenv.config();
 const mongoClient = new MongoClient(process.env.DATABASE_URL);
@@ -40,33 +41,39 @@ async function findUserByName(user) {
     }
 }
 
-async function disconectParticipants() {
-    const limitTime = Date.now() - 10000;
+// async function disconectParticipants() {
+//     const limitTime = Date.now() - 10000;
 
-    try {
-        const excludedParticipants = await db.collection(collections.participants)
-            .find({ lastStatus: { $lt: limitTime } })
-            .toArray();
+//     try {
+//         const promises = [];
+//         const excludedParticipants = await db.collection(collections.participants)
+//             .find({ lastStatus: { $lt: limitTime } })
+//             .toArray();
 
-        db.collection(collections.participants)
-            .deleteMany({ lastStatus: { $lt: limitTime } });
+//         const promiseDelete = db.collection(collections.participants)
+//             .deleteMany({ lastStatus: { $lt: limitTime } });
+//         promises.push(promiseDelete);
 
-        excludedParticipants.forEach(participant => {
-            db.collection(collections.messages).insertOne({
-                from: participant.name,
-                to: 'Todos',
-                text: 'sai da sala...',
-                type: 'status',
-                time: dayjs().format('HH:mm:ss')
-            })
-        })
-    } catch (error) {
-        res.status(500).send(error.message)
-    }
-}
+//         excludedParticipants.forEach(participant => {
+//             const promiseMsg = db.collection(collections.messages).insertOne({
+//                 from: participant.name,
+//                 to: 'Todos',
+//                 text: 'sai da sala...',
+//                 type: 'status',
+//                 time: dayjs().format('HH:mm:ss')
+//             });
 
-const timeBetweenChecks = 15000;
-const intervalId = setInterval(disconectParticipants, timeBetweenChecks);
+//             promises.push(promiseMsg);
+//         });
+
+//         await Promise.all(promises);
+//     } catch (error) {
+//         res.status(500).send(error.message)
+//     }
+// }
+
+// const timeBetweenChecks = 15000;
+// const intervalId = setInterval(disconectParticipants, timeBetweenChecks);
 
 app.get('/participants', (req, res) => {
     db.collection(collections.participants).find().toArray()
@@ -75,7 +82,8 @@ app.get('/participants', (req, res) => {
 });
 
 app.post('/participants', async (req, res) => {
-    const { name } = req.body;
+    let { name } = req.body;
+    name = stripHtml(name.trim()).result;
 
     try {
         await schemaParticipant.validateAsync(req.body, { abortEarly: false });
@@ -110,19 +118,30 @@ app.post('/participants', async (req, res) => {
 });
 
 app.post('/messages', async (req, res) => {
-    const from = req.headers.user;
+    let from = req.headers.user;
+    from = stripHtml(from.trim()).result;
 
     try {
-        await schemaMessage.validateAsync(req.body, { abortEarly: false });
-        const senderIsAtParticipants = await db.collection(collections.participants).findOne({ name: from });
+        if (!(await findUserByName(from))) return res.sendStatus(422);
 
-        if (!senderIsAtParticipants) return res.sendStatus(422);
+        await schemaMessage.validateAsync(req.body, { abortEarly: false });
     } catch (error) {
-        return res.status(422).send(error.details[0].message);
+        if (error.details) {
+            return res.status(422).send(error.details[0].message);
+        } else {
+            return res.status(500).send(error.message);
+        }
+        
     }
 
     try {
-        const newMessage = { from, ...req.body, time: dayjs().format('HH:mm:ss') }
+        const newMessage = { 
+            from, 
+            to: req.body.to.trim(), 
+            text: req.body.text.trim(),
+            type: req.body.type.trim(),
+            time: dayjs().format('HH:mm:ss') 
+        }
         db.collection(collections.messages).insertOne(newMessage);
     } catch (error) {
         return res.status(500).send(error.message);
@@ -181,4 +200,27 @@ app.post('/status', async (req, res) => {
     }
 
 
+});
+
+app.delete('/messages/:id', async (req, res) => {
+    let user = req.headers.user;
+    user = stripHtml(user.trim()).result;
+    const {id} = req.params;
+    
+    try {
+        if (!(await findUserByName(user))) return res.sendStatus(422);
+
+        const message = await db.collection(collections.messages)
+            .findOne({_id: new ObjectId(id)});
+
+        if (!message) return res.sendStatus(404);
+        if (message.from !== user || message.type === 'status') return res.sendStatus(401);
+
+        await db.collection(collections.messages)
+            .deleteOne({_id: new ObjectId(id)})
+    } catch (error) {
+        return res.status(500).send(error.message);
+    }
+
+    res.sendStatus(202);
 });
