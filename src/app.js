@@ -86,11 +86,6 @@ app.post('/participants', async (req, res) => {
     try {
         if (await findUserByName(name)) return res.sendStatus(409);
 
-        const newParticipant = {
-            name,
-            lastStatus: Date.now()
-        }
-        db.collection(collections.participants).insertOne(newParticipant)
         const newMessage = {
             from: name,
             to: 'Todos',
@@ -99,6 +94,12 @@ app.post('/participants', async (req, res) => {
             time: dayjs().format('HH:mm:ss')
         }
         db.collection(collections.messages).insertOne(newMessage);
+
+        const newParticipant = {
+            name,
+            lastStatus: Date.now()
+        }
+        db.collection(collections.participants).insertOne(newParticipant)
     } catch (error) {
         res.status(500).send(error.message);
     }
