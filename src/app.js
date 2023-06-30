@@ -41,39 +41,39 @@ async function findUserByName(user) {
     }
 }
 
-// async function disconectParticipants() {
-//     const limitTime = Date.now() - 10000;
+async function disconectParticipants() {
+    const limitTime = Date.now() - 10000;
 
-//     try {
-//         const promises = [];
-//         const excludedParticipants = await db.collection(collections.participants)
-//             .find({ lastStatus: { $lt: limitTime } })
-//             .toArray();
+    try {
+        const promises = [];
+        const excludedParticipants = await db.collection(collections.participants)
+            .find({ lastStatus: { $lt: limitTime } })
+            .toArray();
 
-//         const promiseDelete = db.collection(collections.participants)
-//             .deleteMany({ lastStatus: { $lt: limitTime } });
-//         promises.push(promiseDelete);
+        const promiseDelete = db.collection(collections.participants)
+            .deleteMany({ lastStatus: { $lt: limitTime } });
+        promises.push(promiseDelete);
 
-//         excludedParticipants.forEach(participant => {
-//             const promiseMsg = db.collection(collections.messages).insertOne({
-//                 from: participant.name,
-//                 to: 'Todos',
-//                 text: 'sai da sala...',
-//                 type: 'status',
-//                 time: dayjs().format('HH:mm:ss')
-//             });
+        excludedParticipants.forEach(participant => {
+            const promiseMsg = db.collection(collections.messages).insertOne({
+                from: participant.name,
+                to: 'Todos',
+                text: 'sai da sala...',
+                type: 'status',
+                time: dayjs().format('HH:mm:ss')
+            });
 
-//             promises.push(promiseMsg);
-//         });
+            promises.push(promiseMsg);
+        });
 
-//         await Promise.all(promises);
-//     } catch (error) {
-//         res.status(500).send(error.message)
-//     }
-// }
+        await Promise.all(promises);
+    } catch (error) {
+        res.status(500).send(error.message)
+    }
+}
 
-// const timeBetweenChecks = 15000;
-// const intervalId = setInterval(disconectParticipants, timeBetweenChecks);
+const timeBetweenChecks = 15000;
+const intervalId = setInterval(disconectParticipants, timeBetweenChecks);
 
 app.get('/participants', (req, res) => {
     db.collection(collections.participants).find().toArray()
