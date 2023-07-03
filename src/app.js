@@ -84,14 +84,13 @@ app.get('/participants', (req, res) => {
 });
 
 app.post('/participants', async (req, res) => {
-    let { name } = req.body;
-    if (name) name = stripHtml(name.trim()).result;
-
     try {
         await schemaParticipant.validateAsync(req.body, { abortEarly: false });
     } catch (error) {
         return res.status(422).send({ message: error.details.map(detail => detail.message) })
     }
+
+    const name = stripHtml(req.body.name.trim()).result;
 
     try {
         if (await findUserByName(name)) return res.sendStatus(409);
@@ -120,7 +119,11 @@ app.post('/participants', async (req, res) => {
 });
 
 app.post('/messages', async (req, res) => {
-    let from = Buffer.from(req.headers['user'], 'latin1').toString('utf-8');
+    let from;
+
+    if (!req.headers.user) return res.sendStatus(422);
+    
+    from = Buffer.from(req.headers['user'], 'latin1').toString('utf-8');
     from = stripHtml(from.trim()).result;
 
     try {
