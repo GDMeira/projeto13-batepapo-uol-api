@@ -11,6 +11,8 @@ const mongoClient = new MongoClient(process.env.DATABASE_URL);
 let db;
 const collections = { participants: 'participants', messages: 'messages' };
 
+//TODO: sanetizar o corpo das mensages no post messages, checar validações na última avaliação hub
+
 mongoClient.connect()
     .then(() => db = mongoClient.db())
     .catch(err => console.log(err.messsage));
@@ -41,39 +43,39 @@ async function findUserByName(user) {
     }
 }
 
-async function disconectParticipants() {
-    const limitTime = Date.now() - 10000;
+// async function disconectParticipants() {
+//     const limitTime = Date.now() - 10000;
 
-    try {
-        const promises = [];
-        const excludedParticipants = await db.collection(collections.participants)
-            .find({ lastStatus: { $lt: limitTime } })
-            .toArray();
+//     try {
+//         const promises = [];
+//         const excludedParticipants = await db.collection(collections.participants)
+//             .find({ lastStatus: { $lt: limitTime } })
+//             .toArray();
 
-        const promiseDelete = db.collection(collections.participants)
-            .deleteMany({ lastStatus: { $lt: limitTime } });
-        promises.push(promiseDelete);
+//         const promiseDelete = db.collection(collections.participants)
+//             .deleteMany({ lastStatus: { $lt: limitTime } });
+//         promises.push(promiseDelete);
 
-        excludedParticipants.forEach(participant => {
-            const promiseMsg = db.collection(collections.messages).insertOne({
-                from: participant.name,
-                to: 'Todos',
-                text: 'sai da sala...',
-                type: 'status',
-                time: dayjs().format('HH:mm:ss')
-            });
+//         excludedParticipants.forEach(participant => {
+//             const promiseMsg = db.collection(collections.messages).insertOne({
+//                 from: participant.name,
+//                 to: 'Todos',
+//                 text: 'sai da sala...',
+//                 type: 'status',
+//                 time: dayjs().format('HH:mm:ss')
+//             });
 
-            promises.push(promiseMsg);
-        });
+//             promises.push(promiseMsg);
+//         });
 
-        await Promise.all(promises);
-    } catch (error) {
-        res.status(500).send(error.message)
-    }
-}
+//         await Promise.all(promises);
+//     } catch (error) {
+//         res.status(500).send(error.message)
+//     }
+// }
 
-const timeBetweenChecks = 15000;
-const intervalId = setInterval(disconectParticipants, timeBetweenChecks);
+// const timeBetweenChecks = 15000;
+// const intervalId = setInterval(disconectParticipants, timeBetweenChecks);
 
 app.get('/participants', (req, res) => {
     db.collection(collections.participants).find().toArray()
@@ -120,7 +122,6 @@ app.post('/participants', async (req, res) => {
 app.post('/messages', async (req, res) => {
     let from = Buffer.from(req.headers['user'], 'latin1').toString('utf-8');
     from = stripHtml(from.trim()).result;
-    console.log(from);
 
     try {
         if (!(await findUserByName(from))) return res.sendStatus(422);
@@ -128,7 +129,7 @@ app.post('/messages', async (req, res) => {
         await schemaMessage.validateAsync(req.body, { abortEarly: false });
     } catch (error) {
         if (error.details) {
-            return res.status(422).send(error.details[0].message);
+            return res.status(422).send(error.details.map(detail => detail.message));
         } else {
             return res.status(500).send(error.message);
         }
@@ -143,7 +144,7 @@ app.post('/messages', async (req, res) => {
             type: req.body.type.trim(),
             time: dayjs().format('HH:mm:ss') 
         }
-        db.collection(collections.messages).insertOne(newMessage);
+        await db.collection(collections.messages).insertOne(newMessage);
     } catch (error) {
         return res.status(500).send(error.message);
     }
@@ -177,7 +178,8 @@ app.get('/messages', async (req, res) => {
 });
 
 app.post('/status', async (req, res) => {
-    const { user } = req.headers;
+    const user = Buffer.from(req.headers['user'], 'latin1').toString('latin1');
+    console.log(user);
 
     if (!user) return res.sendStatus(404);
 
@@ -204,7 +206,7 @@ app.post('/status', async (req, res) => {
 });
 
 app.delete('/messages/:id', async (req, res) => {
-    let user = Buffer.from(req.headers['user'], 'latin1').toString('utf-8');
+    let user = Buffer.from(req.headers['user'], 'latin1').toString('latin1');
     user = stripHtml(user.trim()).result;
     const {id} = req.params;
     
@@ -224,4 +226,43 @@ app.delete('/messages/:id', async (req, res) => {
     }
 
     res.sendStatus(202);
+});
+
+app.put('/messages/:id', async (req, res) => {
+    let user = Buffer.from(req.headers['user'], 'latin1').toString('utf-8');
+    user = stripHtml(user.trim()).result;
+    console.log(user);
+    const {id} = req.params;
+    
+    try {
+        if (!(await findUserByName(user))) return res.sendStatus(422);
+
+        await schemaMessage.validateAsync(req.body, { abortEarly: false });
+        const message = await db.collection(collections.messages)
+            .findOne({_id: new ObjectId(id)});
+
+        if (!message) return res.sendStatus(404);
+        if (message.from !== user) return res.sendStatus(401);
+
+        const updatedMessage = { 
+            to: req.body.to.trim(), 
+            text: req.body.text.trim(),
+            type: req.body.type.trim() 
+        }
+
+        await db.collection(collections.messages)
+            .updateOne(
+                {_id: new ObjectId(id)},
+                {$set: updatedMessage}
+            )
+
+    } catch (error) {
+        if (error.details) {
+            return res.status(422).send(error.details.map(detail => detail.message));
+        } else {
+            return res.status(500).send(error.message);
+        }
+    }
+
+    res.sendStatus(200);
 });
